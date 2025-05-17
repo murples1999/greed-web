@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Greed Web</title>
+  <style>
+    body { font-family: sans-serif; margin:0; padding:0; display:flex; flex-direction:column; align-items:center; background:#111; color:white; height:100vh; overflow:hidden; }
+    #setup, #game, #keybindEditor, #colorPickerEditor, #helpEditor { width:100%; text-align:center; }
+    #setup { margin-top:2rem; }
+    #game:not(.hidden), #keybindEditor:not(.hidden), #colorPickerEditor:not(.hidden), #helpEditor:not(.hidden) { display:flex; flex-direction:column; height:100%; }
+    #gridForm label { margin:0 1rem; }
+    #leaderboards { margin-top:2rem; }
+    #lb-list { display:flex; flex-wrap:wrap; justify-content:center; list-style:none; padding:0; gap:0.5rem; margin:0.5rem 0; }
+    .lb-button { background:#444; border:none; color:white; padding:0.25rem 0.5rem; cursor:pointer; border-radius:4px; }
+    #lb-scores { margin-top:1rem; text-align:center; }
+    #lb-scores-list { list-style-position:inside; padding:0; margin:0 auto; text-align:left; width:fit-content; }
+    #gameOverContainer, #statusContainer { flex:0 0 auto; margin:0.5rem 0; font-weight:bold; }
+    #gameOverContainer { color:red; }
+    #statusContainer { color:yellow; }
+    #scoreboard { flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:1rem; padding:0.5rem; }
+    #grid { flex:1 1 auto; display:grid; justify-content:center; align-content:center; overflow:hidden; }
+    .cell { display:flex; justify-content:center; align-items:center; background:#222; font-weight:bold; box-sizing:border-box; }
+    .player { background:orange; color:black; }
+    .hint { box-shadow: inset 0 0 0 2px lime; }
+    .hidden { display:none!important; }
+    input[type=number] { width:4ch; }
+    input[type=color] { padding:0; border:none; width:2rem; height:2rem; }
+    #colorForm { display:flex; flex-wrap:wrap; justify-content:center; gap:1rem; margin-top:1rem; }
+    .color-item { display:flex; flex-direction:column; align-items:center; color:white; }
+    .color-item label { margin-bottom:0.25rem; }
+    #helpContent { padding:1rem; text-align:left; }
+    #helpContent h3 { margin-top:1rem; }
+  </style>
+</head>
+<body>
+  <div id="setup">
+    <h1>Greed</h1>
+    <form id="gridForm">
+      <label>Rows: <input type="number" id="rows" min="1" max="100" value="22"/></label>
+      <label>Cols: <input type="number" id="cols" min="1" max="100" value="79"/></label>
+      <button type="submit">Start Game</button>
+      <button type="button" id="keybindButton">Key Bindings</button>
+      <button type="button" id="colorPickerButton">Color Picker</button>
+      <button type="button" id="resetSettingsButton">Reset Settings</button>
+      <button type="button" id="helpButton">Help</button>
+    </form>
+    <div id="leaderboards">
+      <h2>Local Leaderboards</h2>
+      <ul id="lb-list"></ul>
+      <div id="lb-scores" class="hidden">
+        <h3 id="lb-title"></h3>
+        <ol id="lb-scores-list"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="keybindEditor" class="hidden">
+    <h2>Key Bindings</h2>
+    <p id="kbPrompt">Press a key for <span id="kbAction"></span></p>
+    <button id="kbCancel">Cancel</button>
+  </div>
+
+  <div id="colorPickerEditor" class="hidden">
+    <h2>Color Picker</h2>
+    <select id="themeSelect">
+      <option value="">Custom</option>
+      <option value="GreedX">GreedX</option>
+      <option value="Ocean">Ocean</option>
+      <option value="Fire">Fire</option>
+      <option value="Hackerman">Hackerman</option>
+      <option value="Rainbow">Rainbow</option>
+      <option value="Solarized">Solarized</option>
+      <option value="Monokai">Monokai</option>
+    </select>
+    <form id="colorForm"></form>
+    <button id="colorSave">Save</button>
+    <button id="colorCancel">Cancel</button>
+  </div>
+
+  <div id="helpEditor" class="hidden">
+    <h2>Help &amp; Rules</h2>
+    <div id="helpContent">
+      <h3>Current Controls</h3>
+      <p>Use your configured movement keys or arrow keys. Press your highlight key to toggle hints, and your restart key to reset the game.</p>
+      <h3>Game Rules &amp; Goal</h3>
+      <p>Step on a number to move that many spaces. Tiles you step on vanish and add to your score. Clear as many tiles as possible before no moves remain.</p>
+      <button type="button" id="helpBack">Back</button>
+    </div>
+  </div>
+
+  <div id="game" class="hidden">
+    <div id="gameOverContainer" class="hidden"><span id="gameOverMessage">Game Over</span></div>
+    <div id="statusContainer" class="hidden"><span id="statusMessage"></span></div>
+    <div id="scoreboard">
+      <span id="score">Score: 0</span>
+      <span id="percent">0.00%</span>
+      <button id="restart">Restart</button>
+      <button id="backButton">Back to Home</button>
+    </div>
+    <div id="grid"></div>
+  </div>
+
+  <script>
+    // Elements
+    const setup = document.getElementById('setup');
+    const game = document.getElementById('game');
+    const keybindEditor = document.getElementById('keybindEditor');
+    const colorPickerEditor = document.getElementById('colorPickerEditor');
+    const helpEditor = document.getElementById('helpEditor');
+    const keybindButton = document.getElementById('keybindButton');
+    const colorPickerButton = document.getElementById('colorPickerButton');
+    const resetSettingsButton = document.getElementById('resetSettingsButton');
+    const helpButton = document.getElementById('helpButton');
+    const helpBack = document.getElementById('helpBack');
+    const kbPrompt = document.getElementById('kbPrompt');
+    const kbActionSpan = document.getElementById('kbAction');
+    const kbCancel = document.getElementById('kbCancel');
+    const themeSelect = document.getElementById('themeSelect');
+    const colorForm = document.getElementById('colorForm');
+    const colorSave = document.getElementById('colorSave');
+    const colorCancel = document.getElementById('colorCancel');
+    const gridContainer = document.getElementById('grid');
+    const scoreDisplay = document.getElementById('score');
+    const percentDisplay = document.getElementById('percent');
+    const gameOverContainer = document.getElementById('gameOverContainer');
+    const statusContainer = document.getElementById('statusContainer');
+    const statusMessage = document.getElementById('statusMessage');
+    const lbList = document.getElementById('lb-list');
+    const lbScores = document.getElementById('lb-scores');
+    const lbTitle = document.getElementById('lb-title');
+    const lbScoresList = document.getElementById('lb-scores-list');
+    const gridForm = document.getElementById('gridForm');
+    const backButton = document.getElementById('backButton');
+
+    // State
+    let rows, cols, grid, player, score = 0;
+    let gameOver = false, showHint = false, newHSCount = 0;
+
+    // Keybindings
+    const defaultBindings = { up:'w', down:'s', left:'a', right:'d', upleft:'q', upright:'e', downleft:'z', downright:'c', hint:'p', restart:' ' };
+    let bindings = {}, keyMap = {};
+    function loadBindings() { const saved = JSON.parse(localStorage.getItem('keyBindings')||'{}'); bindings={...defaultBindings,...saved}; }
+    function buildKeyMap() { keyMap={ [bindings.up]:[-1,0], [bindings.down]:[1,0], [bindings.left]:[0,-1], [bindings.right]:[0,1], [bindings.upleft]:[-1,-1], [bindings.upright]:[-1,1], [bindings.downleft]:[1,-1], [bindings.downright]:[1,1], [bindings.hint]:'hint', [bindings.restart]:'restart' }; }
+    const directions=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+
+    // Color Picker
+    const defaultColors = {1:'#ffffff',2:'#ffff00',3:'#ff00ff',4:'#ffff00',5:'#00ff00',6:'#ff0000',7:'#00ff00',8:'#ff0000',9:'#00ffff'};
+    let colorBindings = {}, colorMap = {};
+    function buildColorMap(){ colorMap={}; for(let i=1;i<=9;i++) colorMap[i]=colorBindings[i]; }
+    function loadColorBindings(){ const saved = JSON.parse(localStorage.getItem('colorBindings')||'{}'); colorBindings={...defaultColors,...saved}; buildColorMap(); }
+
+    // Preset themes
+    const themes = {
+      GreedX:    {1:'#ffffff',2:'#ffff00',3:'#ff00ff',4:'#ffff00',5:'#00ff00',6:'#ff0000',7:'#00ff00',8:'#ff0000',9:'#00ffff'},
+      Ocean:     {1:'#e0f7fa',2:'#b2ebf2',3:'#80deea',4:'#4dd0e1',5:'#26c6da',6:'#00bcd4',7:'#00acc1',8:'#0097a7',9:'#006064'},
+      Fire:      {1:'#ffebee',2:'#ffcdd2',3:'#ef9a9a',4:'#e57373',5:'#ef5350',6:'#f44336',7:'#e53935',8:'#d32f2f',9:'#b71c1c'},
+      Hackerman: {1:'#00ff00',2:'#00ff00',3:'#00ff00',4:'#00ff00',5:'#00ff00',6:'#00ff00',7:'#00ff00',8:'#00ff00',9:'#00ff00'},
+      Rainbow:   {1:'#ff0000',2:'#ff7f00',3:'#ffff00',4:'#00ff00',5:'#00ffff',6:'#007fff',7:'#ff00ff',8:'#ff69b4',9:'#8b00ff'},
+      Solarized: {1:'#586e75',2:'#b58900',3:'#859900',4:'#2aa198',5:'#268bd2',6:'#d33682',7:'#dc322f',8:'#6c71c4',9:'#93a1a1'},
+      Monokai:   {1:'#f8f8f2',2:'#fd971f',3:'#a6e22e',4:'#66d9ef',5:'#f92672',6:'#e6db74',7:'#f92672',8:'#ae81ff',9:'#75715e'}
+    };
+    themeSelect.addEventListener('change', () => {
+      const sel = themeSelect.value;
+      if (themes[sel]) {
+        for (let i=1; i<=9; i++) {
+          colorBindings[i] = themes[sel][i];
+        }
+        buildColorMap();
+        document.querySelectorAll('#colorForm input[type=color]').forEach(inp => {
+          inp.value = colorBindings[inp.dataset.num];
+        });
+      }
+    });
+
+    function enterColorPicker(){ loadColorBindings(); setup.classList.add('hidden'); keybindEditor.classList.add('hidden'); helpEditor.classList.add('hidden'); game.classList.add('hidden'); colorPickerEditor.classList.remove('hidden'); colorForm.innerHTML='';
+      for(let i=1;i<=9;i++){ const div=document.createElement('div'); div.className='color-item'; const label=document.createElement('label'); label.textContent=i; const input=document.createElement('input'); input.type='color'; input.value=colorBindings[i]; input.dataset.num=i; div.append(label,input); colorForm.append(div); }
+    }
+    function exitColorPicker(save=false){ if(save){ document.querySelectorAll('#colorForm input[type=color]').forEach(inp=>{ colorBindings[inp.dataset.num]=inp.value; }); localStorage.setItem('colorBindings', JSON.stringify(colorBindings)); buildColorMap(); } colorPickerEditor.classList.add('hidden'); setup.classList.remove('hidden'); }
+    colorPickerButton.addEventListener('click', enterColorPicker);
+    colorSave.addEventListener('click', ()=>exitColorPicker(true));
+    colorCancel.addEventListener('click', ()=>exitColorPicker(false));
+
+    // Reset Settings
+    resetSettingsButton.addEventListener('click', () => {
+      localStorage.removeItem('keyBindings');
+      localStorage.removeItem('colorBindings');
+      loadBindings(); buildKeyMap();
+      loadColorBindings();
+      keybindEditor.classList.add('hidden');
+      colorPickerEditor.classList.add('hidden');
+      helpEditor.classList.add('hidden');
+      game.classList.add('hidden');
+      setup.classList.remove('hidden');
+    });
+
+    // Help Screen
+    helpButton.addEventListener('click', () => {
+      setup.classList.add('hidden');
+      keybindEditor.classList.add('hidden');
+      colorPickerEditor.classList.add('hidden');
+      helpEditor.classList.remove('hidden');
+    });
+    helpBack.addEventListener('click', () => {
+      helpEditor.classList.add('hidden');
+      setup.classList.remove('hidden');
+    });
+
+    // Keybind Editor Helpers
+    const actionsKeys = Object.keys(defaultBindings); let kbIndex=0;
+    function promptNextBinding(){ const action=actionsKeys[kbIndex]; kbActionSpan.textContent=action; kbPrompt.textContent=`Press a key for ${action}`; }
+    function handleKeybind(e){ bindings[actionsKeys[kbIndex]] = e.key; kbIndex++; if(kbIndex<actionsKeys.length) promptNextBinding(); else{ localStorage.setItem('keyBindings', JSON.stringify(bindings)); buildKeyMap(); keybindEditor.classList.add('hidden'); setup.classList.remove('hidden'); window.removeEventListener('keydown', handleKeybind); } }
+    keybindButton.addEventListener('click', () => { loadBindings(); buildKeyMap(); setup.classList.add('hidden'); colorPickerEditor.classList.add('hidden'); helpEditor.classList.add('hidden'); game.classList.add('hidden'); keybindEditor.classList.remove('hidden'); kbIndex=0; promptNextBinding(); window.addEventListener('keydown', handleKeybind); });
+    kbCancel.addEventListener('click', ()=>{ keybindEditor.classList.add('hidden'); setup.classList.remove('hidden'); window.removeEventListener('keydown', handleKeybind); });
+
+    // Status Helpers
+    function showStatus(msg){ statusMessage.textContent=msg; statusContainer.classList.remove('hidden'); }
+    function clearStatus(){ statusContainer.classList.add('hidden'); statusMessage.textContent=''; }
+
+    // Leaderboards
+    function saveHighScore(){ const key=`leaderboard_${rows}x${cols}`,total=rows*cols,cleared=grid.flat().filter(v=>v===0).length,percent=((cleared/total)*100).toFixed(2); let list=JSON.parse(localStorage.getItem(key)||'[]'); list.push({score,percent}); list.sort((a,b)=>b.score-a.score); if(list[0].score===score){ showStatus('New High Score!'); newHSCount=10; } if(list.length>10) list.length=10; localStorage.setItem(key,JSON.stringify(list)); updateLeaderboardList(); }
+    function updateLeaderboardList(){ lbList.innerHTML=''; Object.keys(localStorage).filter(k=>k.startsWith('leaderboard_')).forEach(k=>{ const size=k.replace('leaderboard_',''); const li=document.createElement('li'); const btn=document.createElement('button'); btn.textContent=size; btn.className='lb-button'; btn.onclick=()=>showLeaderboard(size); li.appendChild(btn); lbList.appendChild(li); }); }
+    function showLeaderboard(size){ const list=JSON.parse(localStorage.getItem(`leaderboard_${size}`)||'[]'); lbTitle.textContent=`${size} Top Scores`; lbScoresList.innerHTML=''; list.forEach(e=>{ const li=document.createElement('li'); li.textContent=`Score: ${e.score}, ${e.percent}%`; lbScoresList.appendChild(li); }); lbScores.classList.remove('hidden'); }
+
+    // Game logic
+    function generateGrid(r,c){ rows=r; cols=c; grid=Array.from({length:rows},()=>Array.from({length:cols},()=>Math.floor(Math.random()*9)+1)); let y,x; do{y=Math.floor(Math.random()*rows);x=Math.floor(Math.random()*cols);}while(grid[y][x]===0); player={y,x}; score=0; gameOver=false; showHint=false; newHSCount=0; gameOverContainer.classList.add('hidden'); lbScores.classList.add('hidden'); clearStatus(); renderGrid(); }
+    function renderGrid(){ gridContainer.innerHTML=''; const sbH=document.getElementById('scoreboard').offsetHeight,w=window.innerWidth,h=window.innerHeight-sbH,sz=Math.floor(Math.min(w/cols,h/rows)); gridContainer.style.gridTemplateColumns=`repeat(${cols},${sz}px)`; gridContainer.style.gridTemplateRows=`repeat(${rows},${sz}px)`; for(let y=0;y<rows;y++){ for(let x=0;x<cols;x++){ const cell=document.createElement('div'); cell.className='cell'; cell.style.width=cell.style.height=`${sz}px`; const val=grid[y][x]; if(y===player.y&&x===player.x){cell.classList.add('player');cell.textContent='@';} else if(val>0){ cell.textContent=val; cell.style.color=colorMap[val]; } if(showHint){ directions.forEach(([dy,dx])=>{ if(isValidPath(dy,dx)){ const steps=grid[player.y+dy][player.x+dx]; for(let i=1;i<=steps;i++){ if(player.y+dy*i===y&&player.x+dx*i===x) cell.classList.add('hint'); } } }); } gridContainer.appendChild(cell);} } updateScore(); if(!hasMoves()&&!gameOver){ gameOver=true; gameOverContainer.classList.remove('hidden'); saveHighScore(); }}
+    function updateScore(){ const total=rows*cols; let cleared=0; grid.forEach(r=>r.forEach(v=>v===0&&cleared++)); scoreDisplay.textContent=`Score: ${score}`; percentDisplay.textContent=`${((cleared/total)*100).toFixed(2)}%`; }
+    function isValidPath(dy,dx){ const ny=player.y+dy,nx=player.x+dx; if(ny<0||ny>=rows||nx<0||nx>=cols||grid[ny][nx]===0) return false; const steps=grid[ny][nx]; for(let i=1;i<=steps;i++){ const yy=player.y+dy*i,xx=player.x+dx*i; if(yy<0||yy>=rows||xx<0||xx>=cols||grid[yy][xx]===0) return false; } return true; }
+    function hasMoves(){ return directions.some(([dy,dx])=>isValidPath(dy,dx)); }
+    function move(dy,dx){ if(game.classList.contains('hidden'))return; if(!isValidPath(dy,dx)){showStatus('Bad Move');return;} if(statusMessage.textContent==='Bad Move')clearStatus(); if(newHSCount>0){newHSCount--; if(newHSCount===0)clearStatus();} const steps=grid[player.y+dy][player.x+dx]; for(let i=1;i<=steps;i++){ grid[player.y+dy*i][player.x+dx*i]=0; score++; } player.y+=dy*steps; player.x+=dx*steps; renderGrid(); }
+    gridForm.addEventListener('submit',e=>{ e.preventDefault(); const r=+document.getElementById('rows').value; const c=+document.getElementById('cols').value; setup.classList.add('hidden'); game.classList.remove('hidden'); generateGrid(r,c); });
+    document.getElementById('restart').addEventListener('click',()=>generateGrid(rows,cols));
+    backButton.addEventListener('click',()=>{ clearStatus(); game.classList.add('hidden'); setup.classList.remove('hidden'); gridContainer.innerHTML=''; });
+    window.addEventListener('keydown',e=>{ if(game.classList.contains('hidden'))return; const action=keyMap[e.key]; if(action==='restart')return generateGrid(rows,cols); if(action==='hint'){showHint=!showHint;return renderGrid();} if(Array.isArray(action)){e.preventDefault();return move(...action);} });
+    loadBindings(); buildKeyMap(); loadColorBindings(); updateLeaderboardList();
+  </script>
+</body>
+</html>
